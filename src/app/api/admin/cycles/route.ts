@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { query, queryOne, ensureDb } from '@/lib/db';
 
 export async function GET() {
   if (!checkAdminAuth()) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getDb();
-  const cycles = db.prepare('SELECT * FROM cycles ORDER BY created_at DESC').all();
+  await ensureDb();
+  const cycles = await query('SELECT * FROM cycles ORDER BY created_at DESC');
   return NextResponse.json({ cycles });
 }
 
@@ -18,13 +18,15 @@ export async function POST(request: NextRequest) {
   }
 
   const { name, status = 'active' } = await request.json();
-
   if (!name) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 });
   }
 
-  const db = getDb();
-  const result = db.prepare('INSERT INTO cycles (name, status) VALUES (?, ?)').run(name, status);
+  await ensureDb();
+  const row = await queryOne<{ id: number }>(
+    'INSERT INTO cycles (name, status) VALUES ($1, $2) RETURNING id',
+    [name, status]
+  );
 
-  return NextResponse.json({ id: result.lastInsertRowid, name, status });
+  return NextResponse.json({ id: row?.id, name, status });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, ensureDb } from '@/lib/db';
 import { parseToken } from '@/lib/tokens';
 
 export async function GET(
@@ -7,43 +7,41 @@ export async function GET(
   { params }: { params: { token: string } }
 ) {
   const parsed = parseToken(params.token);
-
   if (!parsed) {
     return NextResponse.json({ error: 'Invalid or expired review link.' }, { status: 400 });
   }
 
-  const db = getDb();
+  await ensureDb();
 
-  // Find the submission for this token
-  const submission = db.prepare(
-    'SELECT * FROM submissions WHERE token = ?'
-  ).get(params.token) as {
+  const submission = await queryOne<{
     id: number;
     participant_id: number;
     cycle_id: number;
     is_self_review: number;
     submitted_at: string | null;
-  } | undefined;
+  }>(
+    'SELECT id, participant_id, cycle_id, is_self_review, submitted_at FROM submissions WHERE token = $1',
+    [params.token]
+  );
 
   if (!submission) {
     return NextResponse.json({ error: 'Review link not found.' }, { status: 404 });
   }
 
-  const participant = db.prepare(
-    'SELECT * FROM participants WHERE id = ?'
-  ).get(submission.participant_id) as {
-    id: number;
-    name: string;
-  } | undefined;
+  const participant = await queryOne<{ id: number; name: string }>(
+    'SELECT id, name FROM participants WHERE id = $1',
+    [submission.participant_id]
+  );
 
   if (!participant) {
     return NextResponse.json({ error: 'Participant not found.' }, { status: 404 });
   }
 
   const category = submission.is_self_review ? 'self' : 'peer';
-  const questions = db.prepare(
-    'SELECT * FROM questions WHERE category = ? ORDER BY order_index ASC'
-  ).all(category);
+  const questions = await query(
+    'SELECT * FROM questions WHERE category = $1 ORDER BY order_index ASC',
+    [category]
+  );
 
   const firstName = participant.name.split(' ')[0];
 

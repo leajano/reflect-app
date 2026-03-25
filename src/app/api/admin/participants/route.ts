@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { query, queryOne, ensureDb } from '@/lib/db';
 import { generateSelfToken } from '@/lib/tokens';
 
 export async function GET() {
@@ -8,17 +8,19 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getDb();
-  const participants = db.prepare(`
-    SELECT p.*, c.name as cycle_name,
-      COUNT(CASE WHEN s.is_self_review = 0 AND s.submitted_at IS NOT NULL THEN 1 END) as peer_count,
-      COUNT(CASE WHEN s.is_self_review = 1 AND s.submitted_at IS NOT NULL THEN 1 END) as self_count
+  await ensureDb();
+  const participants = await query(`
+    SELECT
+      p.id, p.name, p.role, p.team, p.cycle_id, p.created_at,
+      c.name as cycle_name,
+      COUNT(CASE WHEN s.is_self_review = 0 AND s.submitted_at IS NOT NULL THEN 1 END)::int as peer_count,
+      COUNT(CASE WHEN s.is_self_review = 1 AND s.submitted_at IS NOT NULL THEN 1 END)::int as self_count
     FROM participants p
     JOIN cycles c ON p.cycle_id = c.id
     LEFT JOIN submissions s ON s.participant_id = p.id
-    GROUP BY p.id
+    GROUP BY p.id, p.name, p.role, p.team, p.cycle_id, p.created_at, c.name
     ORDER BY p.name ASC
-  `).all();
+  `);
 
   return NextResponse.json({ participants });
 }
@@ -34,25 +36,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
   }
 
-  const db = getDb();
+  await ensureDb();
 
-  // Check cycle exists
-  const cycle = db.prepare('SELECT id FROM cycles WHERE id = ?').get(parseInt(cycle_id));
+  const cycle = await queryOne('SELECT id FROM cycles WHERE id = $1', [parseInt(cycle_id)]);
   if (!cycle) {
     return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });
   }
 
-  const result = db.prepare(
-    'INSERT INTO participants (name, role, team, cycle_id) VALUES (?, ?, ?, ?)'
-  ).run(name, role, team, parseInt(cycle_id));
+  const row = await queryOne<{ id: number }>(
+    'INSERT INTO participants (name, role, team, cycle_id) VALUES ($1, $2, $3, $4) RETURNING id',
+    [name, role, team, parseInt(cycle_id)]
+  );
+  const participantId = row!.id;
 
-  const participantId = result.lastInsertRowid as number;
-
-  // Auto-create the self-review submission token
   const selfToken = generateSelfToken(participantId, parseInt(cycle_id));
-  db.prepare(
-    'INSERT INTO submissions (participant_id, cycle_id, is_self_review, token) VALUES (?, ?, 1, ?)'
-  ).run(participantId, parseInt(cycle_id), selfToken);
+  await query(
+    'INSERT INTO submissions (participant_id, cycle_id, is_self_review, token) VALUES ($1, $2, 1, $3)',
+    [participantId, parseInt(cycle_id), selfToken]
+  );
 
   return NextResponse.json({ id: participantId });
 }

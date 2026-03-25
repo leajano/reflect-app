@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { query, queryOne, ensureDb } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 
 export async function POST(
@@ -11,32 +11,34 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getDb();
+  await ensureDb();
   const participantId = parseInt(params.id);
 
-  const participant = db.prepare(`
-    SELECT p.*, c.name as cycle_name
-    FROM participants p
-    JOIN cycles c ON p.cycle_id = c.id
-    WHERE p.id = ?
-  `).get(participantId) as {
+  const participant = await queryOne<{
     id: number;
     name: string;
     role: string;
     team: string;
     cycle_id: number;
     cycle_name: string;
-  } | undefined;
+  }>(
+    `SELECT p.*, c.name as cycle_name
+     FROM participants p
+     JOIN cycles c ON p.cycle_id = c.id
+     WHERE p.id = $1`,
+    [participantId]
+  );
 
   if (!participant) {
     return NextResponse.json({ error: 'Participant not found' }, { status: 404 });
   }
 
-  // Check minimum peer reviews
-  const peerCount = (db.prepare(`
-    SELECT COUNT(*) as count FROM submissions
-    WHERE participant_id = ? AND is_self_review = 0 AND submitted_at IS NOT NULL
-  `).get(participantId) as { count: number }).count;
+  const peerCountRow = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) as count FROM submissions
+     WHERE participant_id = $1 AND is_self_review = 0 AND submitted_at IS NOT NULL`,
+    [participantId]
+  );
+  const peerCount = parseInt(peerCountRow?.count ?? '0');
 
   if (peerCount < 3) {
     return NextResponse.json(
@@ -45,12 +47,12 @@ export async function POST(
     );
   }
 
-  // Gather all submissions and answers
-  const submissions = db.prepare(`
-    SELECT s.id, s.is_self_review
-    FROM submissions s
-    WHERE s.participant_id = ? AND s.submitted_at IS NOT NULL
-  `).all(participantId) as Array<{ id: number; is_self_review: number }>;
+  const submissions = await query<{ id: number; is_self_review: number }>(
+    `SELECT s.id, s.is_self_review
+     FROM submissions s
+     WHERE s.participant_id = $1 AND s.submitted_at IS NOT NULL`,
+    [participantId]
+  );
 
   const allData: {
     type: string;
@@ -58,18 +60,19 @@ export async function POST(
   }[] = [];
 
   for (const submission of submissions) {
-    const answers = db.prepare(`
-      SELECT q.text, q.type, a.answer_text, a.answer_scale
-      FROM answers a
-      JOIN questions q ON a.question_id = q.id
-      WHERE a.submission_id = ?
-      ORDER BY q.order_index
-    `).all(submission.id) as Array<{
+    const answers = await query<{
       text: string;
       type: string;
       answer_text: string | null;
       answer_scale: number | null;
-    }>;
+    }>(
+      `SELECT q.text, q.type, a.answer_text, a.answer_scale
+       FROM answers a
+       JOIN questions q ON a.question_id = q.id
+       WHERE a.submission_id = $1
+       ORDER BY q.order_index`,
+      [submission.id]
+    );
 
     allData.push({
       type: submission.is_self_review ? 'self' : 'peer',
@@ -83,7 +86,6 @@ export async function POST(
   const selfData = allData.filter((d) => d.type === 'self');
   const peerData = allData.filter((d) => d.type === 'peer');
 
-  // Build prompt
   const prompt = `You are generating a peer review report for ${participant.name}, a ${participant.role} on the ${participant.team} team, for the ${participant.cycle_name} review cycle.
 
 Here is their self-assessment:
@@ -140,31 +142,29 @@ Return ONLY valid JSON matching this exact structure:
     });
 
     const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
-
-    // Extract JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No JSON found in response');
-    }
+    if (!jsonMatch) throw new Error('No JSON found in response');
 
     const reportContent = JSON.parse(jsonMatch[0]);
 
-    // Save or update report
-    const existingReport = db.prepare(
-      'SELECT id FROM reports WHERE participant_id = ? AND cycle_id = ?'
-    ).get(participantId, participant.cycle_id) as { id: number } | undefined;
+    const existingReport = await queryOne<{ id: number }>(
+      'SELECT id FROM reports WHERE participant_id = $1 AND cycle_id = $2',
+      [participantId, participant.cycle_id]
+    );
 
     let reportId: number;
     if (existingReport) {
-      db.prepare(
-        "UPDATE reports SET content_json = ?, generated_at = datetime('now') WHERE id = ?"
-      ).run(JSON.stringify(reportContent), existingReport.id);
+      await query(
+        'UPDATE reports SET content_json = $1, generated_at = NOW() WHERE id = $2',
+        [JSON.stringify(reportContent), existingReport.id]
+      );
       reportId = existingReport.id;
     } else {
-      const result = db.prepare(
-        'INSERT INTO reports (participant_id, cycle_id, content_json) VALUES (?, ?, ?)'
-      ).run(participantId, participant.cycle_id, JSON.stringify(reportContent));
-      reportId = result.lastInsertRowid as number;
+      const row = await queryOne<{ id: number }>(
+        'INSERT INTO reports (participant_id, cycle_id, content_json) VALUES ($1, $2, $3) RETURNING id',
+        [participantId, participant.cycle_id, JSON.stringify(reportContent)]
+      );
+      reportId = row!.id;
     }
 
     return NextResponse.json({ reportId, success: true });

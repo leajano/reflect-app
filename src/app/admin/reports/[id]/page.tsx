@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { checkAdminAuth } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { queryOne, ensureDb } from '@/lib/db';
 import type { ReportContent } from '@/types';
 
 function ScoreBar({ score, max = 5 }: { score: number; max?: number }) {
@@ -21,21 +21,15 @@ function ScoreBar({ score, max = 5 }: { score: number; max?: number }) {
   );
 }
 
-export default function ReportPage({ params }: { params: { id: string } }) {
+export default async function ReportPage({ params }: { params: { id: string } }) {
   if (!checkAdminAuth()) {
     redirect('/admin');
   }
 
-  const db = getDb();
+  await ensureDb();
   const reportId = parseInt(params.id);
 
-  const report = db.prepare(`
-    SELECT r.*, p.name as participant_name, p.role, p.team, p.id as participant_id, c.name as cycle_name
-    FROM reports r
-    JOIN participants p ON r.participant_id = p.id
-    JOIN cycles c ON r.cycle_id = c.id
-    WHERE r.id = ?
-  `).get(reportId) as {
+  const report = await queryOne<{
     id: number;
     participant_id: number;
     cycle_id: number;
@@ -45,7 +39,14 @@ export default function ReportPage({ params }: { params: { id: string } }) {
     role: string;
     team: string;
     cycle_name: string;
-  } | undefined;
+  }>(
+    `SELECT r.*, p.name as participant_name, p.role, p.team, p.id as participant_id, c.name as cycle_name
+     FROM reports r
+     JOIN participants p ON r.participant_id = p.id
+     JOIN cycles c ON r.cycle_id = c.id
+     WHERE r.id = $1`,
+    [reportId]
+  );
 
   if (!report) {
     redirect('/admin/dashboard');

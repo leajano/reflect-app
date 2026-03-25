@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { query, queryOne, ensureDb, pool } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   const { token, answers } = await request.json() as {
@@ -11,18 +11,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const db = getDb();
+  await ensureDb();
 
-  // Find submission by token
-  const submission = db.prepare(
-    'SELECT * FROM submissions WHERE token = ?'
-  ).get(token) as {
+  const submission = await queryOne<{
     id: number;
     participant_id: number;
     cycle_id: number;
     is_self_review: number;
     submitted_at: string | null;
-  } | undefined;
+  }>(
+    'SELECT id, participant_id, cycle_id, is_self_review, submitted_at FROM submissions WHERE token = $1',
+    [token]
+  );
 
   if (!submission) {
     return NextResponse.json({ error: 'Invalid review link.' }, { status: 404 });
@@ -32,35 +32,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'This review has already been submitted.' }, { status: 409 });
   }
 
-  // Get questions for category
   const category = submission.is_self_review ? 'self' : 'peer';
-  const questions = db.prepare(
-    'SELECT * FROM questions WHERE category = ?'
-  ).all(category) as Array<{ id: number; type: string }>;
-
-  // Insert answers and mark as submitted
-  const insertAnswer = db.prepare(
-    'INSERT INTO answers (submission_id, question_id, answer_text, answer_scale) VALUES (?, ?, ?, ?)'
+  const questions = await query<{ id: number; type: string }>(
+    'SELECT id, type FROM questions WHERE category = $1',
+    [category]
   );
 
-  const submitTransaction = db.transaction(() => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
     for (const question of questions) {
       const answer = answers[question.id];
       if (answer !== undefined && answer !== '') {
         if (question.type === 'scale') {
-          insertAnswer.run(submission.id, question.id, null, Number(answer));
+          await client.query(
+            'INSERT INTO answers (submission_id, question_id, answer_text, answer_scale) VALUES ($1, $2, $3, $4)',
+            [submission.id, question.id, null, Number(answer)]
+          );
         } else {
-          insertAnswer.run(submission.id, question.id, String(answer), null);
+          await client.query(
+            'INSERT INTO answers (submission_id, question_id, answer_text, answer_scale) VALUES ($1, $2, $3, $4)',
+            [submission.id, question.id, String(answer), null]
+          );
         }
       }
     }
 
-    db.prepare(
-      "UPDATE submissions SET submitted_at = datetime('now') WHERE id = ?"
-    ).run(submission.id);
-  });
-
-  submitTransaction();
+    await client.query('UPDATE submissions SET submitted_at = NOW() WHERE id = $1', [submission.id]);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 
   return NextResponse.json({ success: true });
 }

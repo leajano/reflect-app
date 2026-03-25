@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { checkAdminAuth } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { query, ensureDb } from '@/lib/db';
 
 interface ParticipantRow {
   id: number;
@@ -14,34 +14,46 @@ interface ParticipantRow {
   report_id: number | null;
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
   if (!checkAdminAuth()) {
     redirect('/admin');
   }
 
-  const db = getDb();
+  await ensureDb();
 
-  const cycles = db.prepare('SELECT * FROM cycles ORDER BY created_at DESC').all() as Array<{
+  const cycles = await query<{
     id: number;
     name: string;
     status: string;
     created_at: string;
-  }>;
+  }>('SELECT * FROM cycles ORDER BY created_at DESC');
 
-  const participants = db.prepare(`
+  const participants = await query<ParticipantRow>(`
+    WITH peer_counts AS (
+      SELECT participant_id, COUNT(*)::int as count
+      FROM submissions
+      WHERE is_self_review = 0 AND submitted_at IS NOT NULL
+      GROUP BY participant_id
+    ),
+    self_counts AS (
+      SELECT participant_id, COUNT(*)::int as count
+      FROM submissions
+      WHERE is_self_review = 1 AND submitted_at IS NOT NULL
+      GROUP BY participant_id
+    )
     SELECT
       p.id, p.name, p.role, p.team,
       c.name as cycle_name,
-      COUNT(CASE WHEN s.is_self_review = 0 AND s.submitted_at IS NOT NULL THEN 1 END) as peer_count,
-      COUNT(CASE WHEN s.is_self_review = 1 AND s.submitted_at IS NOT NULL THEN 1 END) as self_count,
+      COALESCE(pc.count, 0) as peer_count,
+      COALESCE(sc.count, 0) as self_count,
       r.id as report_id
     FROM participants p
     JOIN cycles c ON p.cycle_id = c.id
-    LEFT JOIN submissions s ON s.participant_id = p.id
+    LEFT JOIN peer_counts pc ON pc.participant_id = p.id
+    LEFT JOIN self_counts sc ON sc.participant_id = p.id
     LEFT JOIN reports r ON r.participant_id = p.id AND r.cycle_id = p.cycle_id
-    GROUP BY p.id
     ORDER BY c.created_at DESC, p.name ASC
-  `).all() as ParticipantRow[];
+  `);
 
   const activeCycle = cycles.find((c) => c.status === 'active');
 
@@ -67,11 +79,9 @@ export default function DashboardPage() {
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-10">
         {/* Active cycle */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs uppercase tracking-widest text-stone-400 font-medium">
-              Active Cycle
-            </h2>
-          </div>
+          <h2 className="text-xs uppercase tracking-widest text-stone-400 font-medium">
+            Active Cycle
+          </h2>
 
           {activeCycle ? (
             <div className="bg-white border border-stone-200 rounded-lg p-5">

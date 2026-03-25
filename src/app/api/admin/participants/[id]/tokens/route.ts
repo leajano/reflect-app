@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { getDb } from '@/lib/db';
+import { query, queryOne, ensureDb, pool } from '@/lib/db';
 import { generatePeerToken } from '@/lib/tokens';
 
 export async function POST(
@@ -11,21 +11,23 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getDb();
+  await ensureDb();
   const participantId = parseInt(params.id);
 
-  const participant = db.prepare(
-    'SELECT id, cycle_id FROM participants WHERE id = ?'
-  ).get(participantId) as { id: number; cycle_id: number } | undefined;
+  const participant = await queryOne<{ id: number; cycle_id: number }>(
+    'SELECT id, cycle_id FROM participants WHERE id = $1',
+    [participantId]
+  );
 
   if (!participant) {
     return NextResponse.json({ error: 'Participant not found' }, { status: 404 });
   }
 
-  // Count existing peer submissions
-  const existingCount = (db.prepare(
-    'SELECT COUNT(*) as count FROM submissions WHERE participant_id = ? AND is_self_review = 0'
-  ).get(participantId) as { count: number }).count;
+  const countRow = await queryOne<{ count: string }>(
+    'SELECT COUNT(*) as count FROM submissions WHERE participant_id = $1 AND is_self_review = 0',
+    [participantId]
+  );
+  const existingCount = parseInt(countRow?.count ?? '0');
 
   if (existingCount >= 8) {
     return NextResponse.json(
@@ -34,23 +36,27 @@ export async function POST(
     );
   }
 
-  // Generate tokens in a batch of 4, up to the limit of 8
   const toGenerate = Math.min(4, 8 - existingCount);
   const tokens: string[] = [];
 
-  const insertSubmission = db.prepare(
-    'INSERT INTO submissions (participant_id, cycle_id, is_self_review, token) VALUES (?, ?, 0, ?)'
-  );
-
-  const generateBatch = db.transaction(() => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
     for (let i = 0; i < toGenerate; i++) {
       const token = generatePeerToken(participantId, participant.cycle_id);
-      insertSubmission.run(participantId, participant.cycle_id, token);
+      await client.query(
+        'INSERT INTO submissions (participant_id, cycle_id, is_self_review, token) VALUES ($1, $2, 0, $3)',
+        [participantId, participant.cycle_id, token]
+      );
       tokens.push(token);
     }
-  });
-
-  generateBatch();
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 
   return NextResponse.json({ tokens });
 }
