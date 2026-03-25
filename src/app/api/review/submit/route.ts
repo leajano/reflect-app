@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne, ensureDb, pool } from '@/lib/db';
+import { query, queryOne, ensureDb, getPool } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   const { token, answers } = await request.json() as {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     [category]
   );
 
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
 

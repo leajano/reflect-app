@@ -1,7 +1,10 @@
 import { Pool } from 'pg';
 
-// Reuse pool across hot-reloads in dev
+// Pool is created lazily so this module can be imported at build time
+// without DATABASE_URL being set.
 const globalForPg = globalThis as unknown as { _reflectPool: Pool | undefined };
+
+let _productionPool: Pool | undefined;
 
 function createPool(): Pool {
   if (!process.env.DATABASE_URL) {
@@ -19,24 +22,29 @@ function createPool(): Pool {
   });
 }
 
-export const pool: Pool =
-  process.env.NODE_ENV === 'production'
-    ? createPool()
-    : (globalForPg._reflectPool ?? (globalForPg._reflectPool = createPool()));
+// Exported for routes that need a client for transactions
+export function getPool(): Pool {
+  if (process.env.NODE_ENV !== 'production') {
+    globalForPg._reflectPool ??= createPool();
+    return globalForPg._reflectPool;
+  }
+  _productionPool ??= createPool();
+  return _productionPool;
+}
 
 // ---------------------------------------------------------------------------
 // Query helpers
 // ---------------------------------------------------------------------------
 
-export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function query<T extends object = Record<string, unknown>>(
   text: string,
   params?: unknown[]
 ): Promise<T[]> {
-  const { rows } = await pool.query(text, params);
+  const { rows } = await getPool().query(text, params);
   return rows as T[];
 }
 
-export async function queryOne<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function queryOne<T extends object = Record<string, unknown>>(
   text: string,
   params?: unknown[]
 ): Promise<T | undefined> {
@@ -58,7 +66,7 @@ export function ensureDb(): Promise<void> {
 }
 
 async function initializeSchema(): Promise<void> {
-  await pool.query(`
+  await getPool().query(`
     CREATE TABLE IF NOT EXISTS cycles (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -109,7 +117,7 @@ async function initializeSchema(): Promise<void> {
     );
   `);
 
-  const { rows } = await pool.query('SELECT COUNT(*) as count FROM questions');
+  const { rows } = await getPool().query('SELECT COUNT(*) as count FROM questions');
   if (parseInt(rows[0].count) === 0) {
     await seedQuestions();
   }
@@ -136,7 +144,7 @@ async function seedQuestions(): Promise<void> {
     ['Is there anything else you want to share about working with [name]?', 'peer', 'open', 10],
   ];
 
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     for (const [text, category, type, order_index] of allQuestions) {

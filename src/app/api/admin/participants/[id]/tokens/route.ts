@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAdminAuth } from '@/lib/auth';
-import { query, queryOne, ensureDb, pool } from '@/lib/db';
+import { query, queryOne, ensureDb, getPool } from '@/lib/db';
 import { generatePeerToken } from '@/lib/tokens';
 
 export async function POST(
@@ -39,7 +39,7 @@ export async function POST(
   const toGenerate = Math.min(4, 8 - existingCount);
   const tokens: string[] = [];
 
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     for (let i = 0; i < toGenerate; i++) {
