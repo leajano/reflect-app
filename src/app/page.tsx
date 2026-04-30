@@ -1,7 +1,12 @@
+import Image from 'next/image';
+
 export default function LandingPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-stone-50">
       <div className="max-w-md w-full text-center space-y-6">
+        <div className="flex justify-center">
+          <Image src="/matchfire-logo.png" alt="Matchfire" width={140} height={140} />
+        </div>
         <div>
           <h1 className="text-4xl font-light tracking-tight text-stone-900 mb-2">
             Matchfire Peer Review Tool
