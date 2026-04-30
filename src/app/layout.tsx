@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Reflect — Peer Review',
-  description: 'AI-powered peer review for creative teams',
+  description: 'AI-powered Peer Review for Agency Teams',
 };
 
 export default function RootLayout({
