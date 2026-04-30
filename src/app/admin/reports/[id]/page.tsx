@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { checkAdminAuth } from '@/lib/auth';
 import { queryOne, ensureDb } from '@/lib/db';
 import type { ReportContent } from '@/types';
+import DownloadPDFButton from './DownloadPDFButton';
 
 function ScoreBar({ score, max = 5 }: { score: number; max?: number }) {
   const pct = (score / max) * 100;
@@ -67,6 +68,14 @@ export default async function ReportPage({ params }: { params: { id: string } })
           </Link>
           <span className="text-stone-300">·</span>
           <span className="text-stone-900 text-sm font-medium">Report</span>
+          <DownloadPDFButton
+            participantName={report.participant_name}
+            role={report.role}
+            team={report.team}
+            cycleName={report.cycle_name}
+            generatedAt={report.generated_at}
+            content={content}
+          />
         </div>
       </nav>
 
