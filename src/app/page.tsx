@@ -11,6 +11,12 @@ export default function LandingPage() {
         <p className="text-stone-500 leading-relaxed">
           This tool is invitation-only. To participate, you&apos;ll need a unique link provided by your admin. If you don&apos;t have one, please reach out to them directly.
         </p>
+
+        <div className="pt-8 border-t border-stone-200">
+          <a href="/admin" className="text-stone-400 text-xs hover:text-stone-600 transition-colors">
+            Admin access →
+          </a>
+        </div>
       </div>
     </main>
   );
