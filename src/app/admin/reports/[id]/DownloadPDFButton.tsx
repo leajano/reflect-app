@@ -48,16 +48,16 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
     };
 
     const addSectionHeading = (text: string) => {
-      checkPage(14);
-      doc.setFontSize(8);
+      checkPage(18);
+      doc.setFontSize(9);
       doc.setTextColor(120, 113, 108);
       doc.setFont('helvetica', 'bold');
       doc.text(text.toUpperCase(), margin, y);
-      y += 5;
+      y += 6;
       doc.setDrawColor(214, 211, 209);
       doc.setLineWidth(0.3);
       doc.line(margin, y, margin + contentW, y);
-      y += 5;
+      y += 6;
     };
 
     // --- Logo ---
@@ -70,23 +70,31 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-      doc.addImage(base64, 'PNG', margin, y, 28, 28);
-      y += 33;
+      // Determine proportional width from natural image dimensions
+      const imgEl = new window.Image();
+      imgEl.src = '/matchfire-logo.png';
+      await new Promise<void>((resolve) => { imgEl.onload = () => resolve(); imgEl.onerror = () => resolve(); });
+      const logoH = 14;
+      const logoW = imgEl.naturalWidth && imgEl.naturalHeight
+        ? (imgEl.naturalWidth / imgEl.naturalHeight) * logoH
+        : logoH;
+      doc.addImage(base64, 'PNG', margin, y, logoW, logoH);
+      y += logoH + 6;
     } catch {
       // Logo unavailable — skip
     }
 
     // --- Title block ---
-    addWrappedText('Peer Review Report', 9, [120, 113, 108], 'normal', 0, 3);
-    addWrappedText(participantName, 22, [28, 25, 23], 'normal', 0, 2);
-    addWrappedText(`${role} · ${team} · ${cycleName}`, 10, [120, 113, 108], 'normal', 0, 2);
+    addWrappedText('Peer Review Report', 10, [120, 113, 108], 'normal', 0, 4);
+    addWrappedText(participantName, 24, [28, 25, 23], 'normal', 0, 3);
+    addWrappedText(`${role} · ${team} · ${cycleName}`, 11, [120, 113, 108], 'normal', 0, 3);
     addWrappedText(
       `Generated ${new Date(generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-      8,
+      9,
       [168, 162, 158],
       'normal',
       0,
-      10
+      14
     );
 
     // --- Peer Ratings ---
@@ -99,45 +107,45 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
     ];
 
     for (const [label, score] of scores) {
-      checkPage(12);
-      doc.setFontSize(9);
+      checkPage(14);
+      doc.setFontSize(10);
       doc.setTextColor(68, 64, 60);
       doc.setFont('helvetica', 'normal');
       doc.text(label, margin, y);
-      doc.setFontSize(9);
+      doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text(`${score.toFixed(1)} / 5`, margin + contentW, y, { align: 'right' });
-      y += 4;
+      y += 5;
 
       // Bar background
       doc.setFillColor(231, 229, 228);
-      doc.roundedRect(margin, y, contentW, 2.5, 1, 1, 'F');
+      doc.roundedRect(margin, y, contentW, 3, 1, 1, 'F');
       // Bar fill
       doc.setFillColor(41, 37, 36);
-      doc.roundedRect(margin, y, (score / 5) * contentW, 2.5, 1, 1, 'F');
-      y += 8;
+      doc.roundedRect(margin, y, (score / 5) * contentW, 3, 1, 1, 'F');
+      y += 10;
     }
-    y += 4;
+    y += 8;
 
     // --- Overview ---
     addSectionHeading('Overview');
-    addWrappedText(content.overall_narrative, 10, [68, 64, 60], 'normal', 0, 10);
+    addWrappedText(content.overall_narrative, 11, [68, 64, 60], 'normal', 0, 14);
 
     // --- What's Working ---
     addSectionHeading("What's Working");
-    addWrappedText(content.what_is_working.summary, 10, [68, 64, 60], 'normal', 0, 4);
+    addWrappedText(content.what_is_working.summary, 11, [68, 64, 60], 'normal', 0, 5);
     for (const theme of content.what_is_working.themes) {
-      addWrappedText(`→  ${theme}`, 9, [120, 113, 108], 'normal', 4, 3);
+      addWrappedText(`\u2022  ${theme}`, 10, [120, 113, 108], 'normal', 4, 4);
     }
-    y += 6;
+    y += 10;
 
     // --- Areas to Develop ---
     addSectionHeading('Areas to Develop');
-    addWrappedText(content.blind_spots.summary, 10, [68, 64, 60], 'normal', 0, 4);
+    addWrappedText(content.blind_spots.summary, 11, [68, 64, 60], 'normal', 0, 5);
     for (const theme of content.blind_spots.themes) {
-      addWrappedText(`→  ${theme}`, 9, [120, 113, 108], 'normal', 4, 3);
+      addWrappedText(`\u2022  ${theme}`, 10, [120, 113, 108], 'normal', 4, 4);
     }
-    y += 6;
+    y += 10;
 
     // --- Start / Stop / Continue ---
     addSectionHeading('Start · Stop · Continue');
@@ -157,54 +165,55 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
     // Column headings
     for (let i = 0; i < sscCols.length; i++) {
       const [label, , color] = sscCols[i];
-      doc.setFontSize(8);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(color[0], color[1], color[2]);
       doc.text(label.toUpperCase(), margin + i * (colW + 4), y);
     }
-    y += 6;
+    y += 7;
 
     // Column items — render row by row to manage page breaks
     const maxItems = Math.max(...sscCols.map(([, items]) => items.length));
     for (let row = 0; row < maxItems; row++) {
-      checkPage(10);
+      checkPage(12);
       for (let col = 0; col < sscCols.length; col++) {
         const [, items] = sscCols[col];
         if (items[row]) {
-          doc.setFontSize(9);
+          doc.setFontSize(10);
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(68, 64, 60);
           const wrapped = doc.splitTextToSize(items[row], colW) as string[];
           doc.text(wrapped, margin + col * (colW + 4), y);
         }
       }
-      y += 10;
+      y += 12;
     }
-    y += 4;
+    y += 8;
 
     // --- Growth Path ---
     addSectionHeading('Growth Path');
-    addWrappedText(content.growth_path.summary, 10, [68, 64, 60], 'normal', 0, 4);
+    addWrappedText(content.growth_path.summary, 11, [68, 64, 60], 'normal', 0, 6);
     if (content.growth_path.suggested_focus) {
-      checkPage(16);
+      checkPage(20);
       doc.setFillColor(245, 245, 244);
-      const focusLines = doc.splitTextToSize(content.growth_path.suggested_focus, contentW - 10) as string[];
-      const boxH = focusLines.length * 5 + 10;
+      const focusLines = doc.splitTextToSize(content.growth_path.suggested_focus, contentW - 12) as string[];
+      const lineH = 11 * 0.352778 * 1.5;
+      const boxH = focusLines.length * lineH + 14;
       doc.rect(margin, y, contentW, boxH, 'F');
       doc.setDrawColor(214, 211, 209);
       doc.setLineWidth(0.5);
       doc.line(margin, y, margin, y + boxH);
-      y += 5;
-      doc.setFontSize(7);
+      y += 6;
+      doc.setFontSize(8);
       doc.setTextColor(120, 113, 108);
       doc.setFont('helvetica', 'bold');
-      doc.text('SUGGESTED FOCUS', margin + 5, y);
-      y += 5;
-      doc.setFontSize(9);
+      doc.text('SUGGESTED FOCUS', margin + 6, y);
+      y += 6;
+      doc.setFontSize(11);
       doc.setTextColor(68, 64, 60);
       doc.setFont('helvetica', 'normal');
-      doc.text(focusLines, margin + 5, y);
-      y += focusLines.length * 5 + 5;
+      doc.text(focusLines, margin + 6, y);
+      y += focusLines.length * lineH + 6;
     }
 
     doc.save(`${participantName.replace(/\s+/g, '-')}-peer-review.pdf`);
