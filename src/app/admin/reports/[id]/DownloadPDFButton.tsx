@@ -141,6 +141,7 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
 
     // --- Areas to Develop ---
     addSectionHeading('Areas to Develop');
+    addWrappedText('Where self-perception and peer signals diverge:', 9, [120, 113, 108], 'bolditalic', 0, 3);
     addWrappedText(content.blind_spots.summary, 11, [68, 64, 60], 'normal', 0, 5);
     for (const theme of content.blind_spots.themes) {
       addWrappedText(`\u2022  ${theme}`, 10, [120, 113, 108], 'normal', 4, 4);
@@ -150,45 +151,25 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
     // --- Start / Stop / Continue ---
     addSectionHeading('Start · Stop · Continue');
 
-    const sscCols: [string, string[], [number, number, number]][] = [
+    const sscSections: [string, string[], [number, number, number]][] = [
       ['Start', content.start_stop_continue.start, [21, 128, 61]],
       ['Stop', content.start_stop_continue.stop, [185, 28, 28]],
       ['Continue', content.start_stop_continue.continue, [29, 78, 216]],
     ];
 
-    const colW = (contentW - 8) / 3;
-
-    for (const [label, , color] of sscCols) {
-      checkPage(6);
-    }
-
-    // Column headings
-    for (let i = 0; i < sscCols.length; i++) {
-      const [label, , color] = sscCols[i];
+    for (const [label, items, color] of sscSections) {
+      checkPage(10);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(color[0], color[1], color[2]);
-      doc.text(label.toUpperCase(), margin + i * (colW + 4), y);
-    }
-    y += 7;
-
-    // Column items — render row by row to manage page breaks
-    const maxItems = Math.max(...sscCols.map(([, items]) => items.length));
-    for (let row = 0; row < maxItems; row++) {
-      checkPage(12);
-      for (let col = 0; col < sscCols.length; col++) {
-        const [, items] = sscCols[col];
-        if (items[row]) {
-          doc.setFontSize(10);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(68, 64, 60);
-          const wrapped = doc.splitTextToSize(items[row], colW) as string[];
-          doc.text(wrapped, margin + col * (colW + 4), y);
-        }
+      doc.text(label.toUpperCase(), margin, y);
+      y += 6;
+      for (const item of items) {
+        addWrappedText(`\u2022  ${item}`, 10, [68, 64, 60], 'normal', 4, 3);
       }
-      y += 12;
+      y += 5;
     }
-    y += 8;
+    y += 4;
 
     // --- Growth Path ---
     addSectionHeading('Growth Path');

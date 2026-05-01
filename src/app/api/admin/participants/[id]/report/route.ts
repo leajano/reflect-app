@@ -118,7 +118,7 @@ Return ONLY valid JSON matching this exact structure:
     "themes": ["Full insight sentence: behavior + impact on team", "Full insight sentence: behavior + impact on team", "Full insight sentence: behavior + impact on team"]
   },
   "blind_spots": {
-    "summary": "1-2 sentences that explicitly name where self-perception and peer perception diverge, then 1-2 sentences framing the growth areas constructively",
+    "summary": "Start by directly naming the gap between how this person sees themselves and how peers experience them (be specific, not vague). Then 1-2 sentences framing the growth areas constructively. Do not start with 'Where self-perception and peer signals diverge:' — that label is added automatically. Just write the content.",
     "themes": ["Specific behavioral observation with context about why it matters or what it costs", "Specific behavioral observation with context", "Specific behavioral observation with context", "Specific behavioral observation with context"]
   },
   "start_stop_continue": {
