@@ -142,7 +142,7 @@ Return ONLY valid JSON matching this exact structure:
     const client = new Anthropic();
     const message = await client.messages.create({
       model: 'claude-opus-4-5',
-      max_tokens: 2000,
+      max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }],
     });
 

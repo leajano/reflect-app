@@ -71,15 +71,20 @@ export default function ParticipantPage({ params }: { params: { id: string } }) 
   async function generateReport() {
     setGeneratingReport(true);
     setError('');
-    const res = await fetch(`/api/admin/participants/${params.id}/report`, {
-      method: 'POST',
-    });
-    const d = await res.json();
-    if (d.error) {
-      setError(d.error);
+    try {
+      const res = await fetch(`/api/admin/participants/${params.id}/report`, {
+        method: 'POST',
+      });
+      const d = await res.json();
+      if (d.error) {
+        setError(d.error);
+        setGeneratingReport(false);
+      } else {
+        router.push(`/admin/reports/${d.reportId}`);
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
       setGeneratingReport(false);
-    } else {
-      router.push(`/admin/reports/${d.reportId}`);
     }
   }
 
@@ -239,7 +244,7 @@ export default function ParticipantPage({ params }: { params: { id: string } }) 
                   disabled={generatingReport || data.peerCount < 3}
                   className="px-4 py-2 border border-stone-200 text-stone-600 rounded-lg text-sm hover:bg-stone-50 transition-colors disabled:opacity-50"
                 >
-                  Regenerate
+                  {generatingReport ? 'Regenerating...' : 'Regenerate'}
                 </button>
               </div>
             </div>
