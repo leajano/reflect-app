@@ -94,14 +94,19 @@ ${selfData.length > 0 ? selfData.map((d) => d.answers.map((a) => `Q: ${a.questio
 Here are ${peerData.length} anonymous peer reviews:
 ${peerData.map((d, i) => `--- Peer Review ${i + 1} ---\n${d.answers.map((a) => `Q: ${a.question}\nA: ${a.answer}`).join('\n\n')}`).join('\n\n')}
 
-Generate a comprehensive developmental feedback report as a JSON object. Follow these principles:
+Generate a sharp, specific developmental feedback report as a JSON object. Follow these principles:
 - Look for patterns across all peer responses, not individual responses
-- Compare self-perception vs peer signals and note meaningful divergences where they exist
+- Compare self-perception vs peer signals and explicitly name meaningful divergences — this is the most valuable insight
 - Be specific, constructive, and direct — not generic HR speak
 - Protect anonymity: never reference specific peer responses individually or say "one reviewer said"
 - Frame everything as developmental and forward-looking, not punitive
 - Be honest about areas for growth without being harsh
 - For scale scores, calculate the average from peer responses
+- Tone: direct, warm, and mentor-like — as if written by a trusted senior colleague
+
+What's Working themes: each bullet must be a full insight sentence that names the specific behavior AND its impact on the team or work. Not a label — a real observation. Example: "Peers consistently rely on ${participant.name.split(' ')[0]} to follow through without being chased — this builds trust and reduces management overhead across the team."
+
+Areas to Develop: write 3–4 bullets, each a specific behavioral observation with context about why it matters or what it is costing them. Lead the section with 1–2 sentences that explicitly name where self-perception and peer perception diverge — be direct about the gap without being harsh.
 
 Return ONLY valid JSON matching this exact structure:
 {
@@ -110,11 +115,11 @@ Return ONLY valid JSON matching this exact structure:
   "generated_at": "${new Date().toISOString()}",
   "what_is_working": {
     "summary": "2-3 sentences on what peers consistently appreciate",
-    "themes": ["specific theme 1", "specific theme 2", "specific theme 3"]
+    "themes": ["Full insight sentence: behavior + impact on team", "Full insight sentence: behavior + impact on team", "Full insight sentence: behavior + impact on team"]
   },
   "blind_spots": {
-    "summary": "2-3 sentences on growth areas, framed constructively",
-    "themes": ["specific area 1", "specific area 2"]
+    "summary": "1-2 sentences that explicitly name where self-perception and peer perception diverge, then 1-2 sentences framing the growth areas constructively",
+    "themes": ["Specific behavioral observation with context about why it matters or what it costs", "Specific behavioral observation with context", "Specific behavioral observation with context", "Specific behavioral observation with context"]
   },
   "start_stop_continue": {
     "start": ["specific behavior to start 1", "specific behavior to start 2"],
