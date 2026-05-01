@@ -141,7 +141,7 @@ export default function DownloadPDFButton({ participantName, role, team, cycleNa
 
     // --- Areas to Develop ---
     addSectionHeading('Areas to Develop');
-    addWrappedText('Where self-perception and peer signals diverge:', 9, [120, 113, 108], 'italic', 0, 3);
+    addWrappedText('Where self-perception and peer signals diverge:', 9, [120, 113, 108], 'normal', 0, 3);
     addWrappedText(content.blind_spots.summary, 11, [68, 64, 60], 'normal', 0, 5);
     for (const theme of content.blind_spots.themes) {
       addWrappedText(`\u2022  ${theme}`, 10, [120, 113, 108], 'normal', 4, 4);
